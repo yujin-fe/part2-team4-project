@@ -1,11 +1,13 @@
 import "./PostId.scss";
-import { Suspense } from "react";
+import { Suspense, lazy } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
 import modifyIcon from "../assets/icons/edit_icon.png";
 import returnIcon from "../assets/icons/return_icon.png";
 import Button from "../components/Button";
-import MessageCard from "../components/MessageCard";
+// import MessageCard from "../components/MessageCard";
+
+const MessageCard = lazy(() => import("../components/MessageCard"));
 
 const PostId = () => {
   const params = useParams();
@@ -17,7 +19,7 @@ const PostId = () => {
   }
 
   return (
-    <Suspense fallback={<div>Loading...</div>}>
+    <>
       <MessageCard recipientId={params.id} />
       <div className="btn-set">
         <div className="return-set">
@@ -41,7 +43,7 @@ const PostId = () => {
           />
         </div>
       </div>
-    </Suspense>
+    </>
   );
 };
 

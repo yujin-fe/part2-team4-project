@@ -1,11 +1,12 @@
 import "./PostLayout.scss";
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { Outlet } from "react-router-dom";
 import { useParams } from "react-router-dom";
 
 import { getRecipient } from "../api/recipients";
 import ActionBar from "../components/ActionBar";
-import useIsMobile from "../hooks/useIsMobile"
+import useIsMobile from "../hooks/useIsMobile";
+import LoadingScreen from "../components/Loading";
 
 const PostLayout = () => {
   const [recipientData, setRecipientData] = useState({});
@@ -21,19 +22,26 @@ const PostLayout = () => {
     }
   };
 
-  useEffect(()=>{
+  useEffect(() => {
     getRecipientData();
-  },[params.id])
+  }, [params.id]);
 
   return (
-    <div className="PostLayout">
-      {isMobile && <header className="mobile-header txt-18-b">To. {recipientData.name}</header>}
-      <ActionBar 
-        recipientId={params.id} 
-        recipientData={recipientData} 
-        getRecipientData={getRecipientData}/>
-      <Outlet />
-    </div>
+    <Suspense fallback={<LoadingScreen />}>
+      <div className="PostLayout">
+        {isMobile && (
+          <header className="mobile-header txt-18-b">
+            To. {recipientData.name}
+          </header>
+        )}
+        <ActionBar
+          recipientId={params.id}
+          recipientData={recipientData}
+          getRecipientData={getRecipientData}
+        />
+        <Outlet />
+      </div>
+    </Suspense>
   );
 };
 

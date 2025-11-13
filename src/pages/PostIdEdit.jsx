@@ -1,16 +1,18 @@
 import "./PostId.scss";
-import { Suspense } from "react";
+import { Suspense, lazy } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import LoadingScreen from "../components/Loading";
 
 import returnIcon from "../assets/icons/return_icon.png";
 import Button from "../components/Button";
-import MessageCard from "../components/MessageCard";
+// import MessageCard from "../components/MessageCard";
+const MessageCard = lazy(() => import("../components/MessageCard"));
 
 const PostIdEdit = () => {
   const params = useParams();
   const navigate = useNavigate();
   return (
-    <Suspense fallback={<div>Loading...</div>}>
+    <Suspense fallback={<LoadingScreen />}>
       <MessageCard
         recipientId={params.id}
         showAddCard={false}

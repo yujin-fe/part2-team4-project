@@ -1,12 +1,13 @@
 import "./List.scss";
-import { useEffect, useState } from "react";
+import { useEffect, useState, lazy } from "react";
 import { Link } from "react-router-dom";
 
 import { getBackgroundData } from "../api/images";
 import { getMessages } from "../api/message";
 import { getCards, getReactions } from "../api/recipients";
 import Button from "../components/Button";
-import Listcard from "../components/Listcard";
+// import Listcard from "../components/Listcard";
+const Listcard = lazy(() => import("../components/Listcard"));
 
 import list_arrow from "./../assets/imgs/list_arrow.svg";
 
