@@ -1,5 +1,5 @@
 import "./MessageCard.scss";
-import { useEffect, useState } from "react";
+import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { getBackgroundData } from "../api/images";
@@ -27,6 +27,37 @@ const fontMap = {
   "나눔손글씨 손편지체": "font-nanum-handwriting",
 };
 
+//현재 다중 호출때문에 외부로 캐시를 빼서 한번만 실행
+const cache = {};
+
+function createResource(asyncFn, key) {
+  // 이미 캐시에 있으면 기존 데이터 사용
+  if (cache[key]) return cache[key];
+
+  let status = "pending";
+  let result;
+
+  const promise = asyncFn()
+    .then((res) => {
+      status = "success";
+      result = res;
+    })
+    .catch((err) => {
+      status = "error";
+      result = err;
+    });
+
+  cache[key] = {
+    read() {
+      if (status === "pending") throw promise; // Suspense가 fallback 표시
+      if (status === "error") throw result;
+      return result;
+    },
+  };
+
+  return cache[key];
+}
+
 const MessageCard = ({
   recipientId,
   showAddCard = true,
@@ -34,74 +65,53 @@ const MessageCard = ({
   showDeletePaperBtn = false,
   className = "",
 }) => {
-  const [messages, setMessages] = useState([]);
-  const [bgColor, setBgColor] = useState();
-  const [bgImage, setBgImage] = useState();
   const { openModal, closeModal } = useModal();
   const navigate = useNavigate();
-  // 모달 오픈
+  const dataResource = useMemo(
+    () =>
+      createResource(async () => {
+        if (!recipientId)
+          return { backgroundImage: "", backgroundColor: "", messages: [] };
+
+        const [bgData, msgData] = await Promise.all([
+          getBackgroundData(recipientId),
+          getMessages(recipientId),
+        ]);
+
+        return {
+          backgroundImage: bgData.backgroundImage,
+          backgroundColor: bgData.backgroundColor,
+          messages: msgData.results,
+        };
+      }, recipientId),
+    [recipientId]
+  );
+
+  // 여기서 Promise 던짐
+  const { backgroundImage, backgroundColor, messages } = dataResource.read();
+
+  // 모달 열기
   const handleOpen = (msg) => {
     openModal(<MessageModal data={msg} onClose={closeModal} />);
   };
 
-  // 배경 데이터 가져오기
-  useEffect(() => {
-    const fetchBackground = async () => {
-      if (!recipientId) return;
-
-      try {
-        const { backgroundImage, backgroundColor } =
-          await getBackgroundData(recipientId);
-        setBgImage(backgroundImage);
-        setBgColor(backgroundColor);
-      } catch (err) {
-        console.error(err);
-      }
-    };
-
-    fetchBackground();
-  }, [recipientId]);
-
-  // 메시지 가져오기
-  useEffect(() => {
-    if (!recipientId) return;
-
-    const fetchMessages = async () => {
-      try {
-        const data = await getMessages(recipientId);
-        setMessages(data.results);
-      } catch (err) {
-        console.error("❌ 메시지 불러오기 실패:", err);
-        setMessages([]); // 실패 시 안전하게 초기화
-      }
-    };
-    fetchMessages();
-  }, [recipientId]);
-
-  // 메시지 삭제하기
+  // 메시지 삭제
   const handleDeleteMessage = async (msgId) => {
-    try {
-      await deleteMessage(msgId); // API 호출
-      setMessages((prev) => prev.filter((msg) => msg.id !== msgId)); // UI에서 제거
-    } catch (err) {
-      console.error("❌ 메시지 삭제 실패:", err);
-    }
+    await deleteMessage(msgId);
+    alert("메시지가 삭제되었습니다.");
+    delete cache[recipientId]; // 캐시 무효화
+    window.location.reload(); // 간단한 refetch
   };
 
-  // 롤링페이퍼 삭제하기
+  // 롤링페이퍼 삭제
   const handleDeletePaper = async () => {
     if (!window.confirm("정말로 롤링페이퍼를 삭제하시겠습니까?")) return;
-
-    try {
-      await deleteRecipient(recipientId);
-      alert("롤링페이퍼가 삭제되었습니다!");
-      navigate("/list"); // ✅ 리스트 페이지로 이동
-      setMessages([]);
-    } catch (err) {
-      console.error("❌ 롤링페이퍼 삭제 실패:", err);
-    }
+    await deleteRecipient(recipientId);
+    alert("롤링페이퍼가 삭제되었습니다!");
+    navigate("/list");
   };
-  //HTML 태그를 텍스트로 변환
+
+  // HTML 엔티티 변환
   const decodeHtmlEntities = (str) => {
     const doc = new DOMParser().parseFromString(String(str), "text/html");
     return doc.documentElement.textContent;
@@ -111,19 +121,17 @@ const MessageCard = ({
     <div
       className="message-card-wrapper"
       style={{
-        background: bgImage
-          ? `url(${bgImage}) center/cover no-repeat`
-          : bgColor
-            ? `var(--${bgColor}-200)`
+        background: backgroundImage
+          ? `url(${backgroundImage}) center/cover no-repeat`
+          : backgroundColor
+            ? `var(--${backgroundColor}-200)`
             : "white",
       }}
     >
       {/* 롤링페이퍼 삭제 버튼 */}
       {showDeletePaperBtn && (
         <div className="delete-paper-btn">
-          <Button onClick={() => handleDeletePaper()}>
-            롤링페이퍼 삭제하기
-          </Button>
+          <Button onClick={handleDeletePaper}>롤링페이퍼 삭제하기</Button>
         </div>
       )}
 
@@ -131,11 +139,11 @@ const MessageCard = ({
         {/* 메시지 카드 추가 버튼 */}
         {showAddCard && <AddMessageCard recipientId={recipientId} />}
 
-        {/* 메시지 카드*/}
+        {/* 메시지 카드 리스트 */}
         {messages.map((msg) => (
           <div
             key={msg.id}
-            className={`message-card message-card`}
+            className="message-card"
             onClick={() => handleOpen(msg)}
           >
             <div className="message-card-top">
@@ -156,25 +164,26 @@ const MessageCard = ({
                   relationType={relationMap[msg.relationship] || "other"}
                 />
               </div>
-              {/* 메시지 카드 삭제 버튼 */}
+
+              {/* 메시지 삭제 버튼 */}
               {showDeleteCardBtn && (
-                <div>
-                  <Button
-                    icon={bin}
-                    variant="outlined"
-                    style={{ padding: "6px" }}
-                    onClick={(e) => {
-                      e.stopPropagation(); // 카드 클릭 이벤트 방지
-                      handleDeleteMessage(msg.id);
-                    }}
-                  />
-                </div>
+                <Button
+                  icon={bin}
+                  variant="outlined"
+                  style={{ padding: "6px" }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDeleteMessage(msg.id);
+                  }}
+                />
               )}
             </div>
 
-            {/* 내용 */}
+            {/* 메시지 내용 */}
             <div
-              className={`content txt-18 ${fontMap[msg.font] || "font-noto-sans"}`}
+              className={`content txt-18 ${
+                fontMap[msg.font] || "font-noto-sans"
+              }`}
             >
               {decodeHtmlEntities(msg.content)}
             </div>
